@@ -1,6 +1,9 @@
 import os
 import json
 import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import requests
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
@@ -9,6 +12,35 @@ app.secret_key = 'quotex_ai_pro_ultra_secure_2026_secret_key'
 
 VIP_PASSWORD = "VIP153"
 USERS_FILE = "users.json"
+
+# ==========================================
+# জিমেইল SMTP কনফিগারেশন (আপনার জিমেইল ও অ্যাপ পাসওয়ার্ড বসান)
+# ==========================================
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+SENDER_EMAIL = "your_email@gmail.com"   # আপনার জিমেইল আইডি এখানে লিখুন
+SENDER_PASSWORD = "your_app_password"    # আপনার জিমেইলের Google App Password এখানে লিখুন
+
+def send_email_code(to_email, code):
+    """রিয়েল-টাইমে জিমেইলে ৬ ডিজিটের ভেরিফিকেশন কোড পাঠানোর ফাংশন"""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = "Quotex AI Pro - Email Verification Code"
+
+        body = f"আপনার Quotex AI Pro একাউন্টের ভেরিফিকেশন কোড হলো: {code}\nকোডটি অ্যাপে দিয়ে ভেরিফিকেশন সম্পন্ন করুন।"
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Email Sending Error: {e}")
+        return False
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -32,9 +64,6 @@ FOREX_PAIRS = {
 }
 
 def get_tradingview_analysis(symbol, timeframe):
-    tf_map = {'1m': '1m', '5m': '5m', '15m': '15m'}
-    tv_tf = tf_map.get(timeframe, '5m')
-    
     url = "https://scanner.tradingview.com/forex/scan"
     payload = {
         "symbols": {"tickers": [symbol]},
@@ -50,7 +79,7 @@ def get_tradingview_analysis(symbol, timeframe):
                     'close': float(row[0] or 0),
                     'ema200': float(row[1] or 0),
                     'rsi': float(row[2] or 50),
-                    'recommendation': float(row[4] or 0) # -1 to 1 scale
+                    'recommendation': float(row[4] or 0)
                 }
     except Exception as e:
         print("API Error:", e)
@@ -88,21 +117,32 @@ def api_signup():
     if email in users:
         return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা হয়েছে।'})
 
+    # ৬ ডিজিটের ভেরিফিকেশন কোড জেনারেট করা
     v_code = str(random.randint(100000, 999999))
+    
     users[email] = {
-        'name': name, 'email': email, 'phone': phone,
-        'password': password, 'verified': False, 'verification_code': v_code
+        'name': name, 
+        'email': email, 
+        'phone': phone,
+        'password': password, 
+        'verified': False, 
+        'verification_code': v_code
     }
     save_users(users)
     
-    print(f"\n==========================================")
-    print(f"[EMAIL VERIFICATION] To: {email}")
-    print(f"YOUR 6-DIGIT CODE IS: {v_code}")
-    print(f"==========================================\n")
+    # জিমেইলে কোড পাঠানোর ফাংশন কল করা
+    email_sent = send_email_code(email, v_code)
+    
+    if email_sent:
+        msg_text = 'রেজিস্ট্রেশন সফল! আপনার জিমেইলে ৬ ডিজিটের কোড পাঠানো হয়েছে।'
+    else:
+        print(f"\n[BACKUP CODE FOR {email}]: {v_code}\n")
+        msg_text = f'রেজিস্ট্রেশন সফল! (ইমেইল পাঠাতে সমস্যা হয়েছে, টার্মিনাল কোড: {v_code})'
 
     return jsonify({
-        'status': 'success', 'email': email,
-        'msg_bn': f'রেজিস্ট্রেশন সফল! আপনার ইমেইলে ({email}) পাঠানো ৬ ডিজিটের কোডটি টার্মিনাল থেকে নিয়ে দিন।'
+        'status': 'success', 
+        'email': email,
+        'msg_bn': msg_text
     })
 
 @app.route('/api/verify-code', methods=['POST'])
@@ -113,14 +153,16 @@ def api_verify_code():
 
     users = load_users()
     if email not in users:
-        return jsonify({'status': 'error', 'msg_bn': 'ইউজার পাওয়া যায়নি।'})
+        return jsonify({'status': 'error', 'msg_bn': 'ইউজার পাওয়া যায়নি। আবার সাইন আপ করুন।'})
 
-    if users[email]['verification_code'] == code:
+    stored_code = str(users[email].get('verification_code', ''))
+    
+    if stored_code == code:
         users[email]['verified'] = True
         save_users(users)
         return jsonify({'status': 'success', 'msg_bn': 'ইমেইল সফলভাবে ভেরিফাই হয়েছে! এখন লগইন করুন।'})
     else:
-        return jsonify({'status': 'error', 'msg_bn': 'ভুল ভেরিফিকেশন কোড দিয়েছেন। আবার চেষ্টা করুন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'ভুল ভেরিফিকেশন কোড দিয়েছেন! সঠিক কোড দিন।'})
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
@@ -130,11 +172,11 @@ def api_login():
 
     users = load_users()
     if email not in users:
-        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট রেজিস্ট্রেশন করা হয়নি!'})
+        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট নেই!'})
 
     user = users[email]
     if not user.get('verified', False):
-        return jsonify({'status': 'error', 'msg_bn': 'আপনার ইমেইলটি এখনো ভেরিফাই করা হয়নি। দয়া করে কোড দিয়ে ভেরিফাই করুন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'আপনার ইমেইলটি এখনো ভেরিফাই করা হয়নি।'})
     if user['password'] != password:
         return jsonify({'status': 'error', 'msg_bn': 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।'})
 
@@ -190,7 +232,7 @@ def analyze():
     market_data = get_tradingview_analysis(tv_symbol, timeframe)
 
     if not market_data:
-        return jsonify({'status': 'error', 'msg_bn': 'মার্কেট ডেটা ফেচ করতে ত্রুটি হয়েছে। একটু পর আবার চেষ্টা করুন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'মার্কেট ডেটা ফেচ করতে ত্রুটি হয়েছে।'})
 
     current_price = round(market_data['close'], 5)
     ema_200 = round(market_data['ema200'], 5)
@@ -210,18 +252,18 @@ def analyze():
     if rec_val > 0.15 and is_uptrend and rsi < 68:
         signal_title = "STRONG CALL 🟢 (BUY / UP)"
         action_code = "BUY"
-        filter_reason = f"Trend Score: Positive, RSI ({rsi}) < 68, Price > EMA200 ({ema_200})"
-        pa_zone = f"Support Reversal: Take CALL at ~{current_price}"
+        filter_reason = f"Trend: Up, RSI ({rsi}) < 68, Price > EMA200"
+        pa_zone = f"Support Reversal: CALL at ~{current_price}"
     elif rec_val < -0.15 and is_downtrend and rsi > 32:
         signal_title = "STRONG PUT 🔴 (SELL / DOWN)"
         action_code = "SELL"
-        filter_reason = f"Trend Score: Negative, RSI ({rsi}) > 32, Price < EMA200 ({ema_200})"
-        pa_zone = f"Resistance Rejection: Take PUT at ~{current_price}"
+        filter_reason = f"Trend: Down, RSI ({rsi}) > 32, Price < EMA200"
+        pa_zone = f"Resistance Rejection: PUT at ~{current_price}"
     else:
         signal_title = "NEUTRAL ⚪ (WAIT)"
         action_code = "NEUTRAL"
-        filter_reason = "Consolidation Market - No Clear Trend"
-        pa_zone = "Wait for breakout at key level"
+        filter_reason = "Consolidation Market"
+        pa_zone = "Wait for breakout"
         exit_time = "N/A"
 
     if not is_vip:
@@ -241,7 +283,7 @@ def analyze():
         'filter_reason': filter_reason,
         'pa_zone': pa_zone,
         'remaining': remaining,
-        'msg_bn': 'টেলিগ্রাম স্টাইল প্রিমিয়াম সিগন্যাল সফলভাবে জেনারেট হয়েছে।'
+        'msg_bn': 'সিগন্যাল সফলভাবে জেনারেট হয়েছে।'
     })
 
 @app.route('/check-result', methods=['POST'])
@@ -281,3 +323,4 @@ def check_result():
 
 if __name__ == '__main__':
     app.run(debug=True)
+    
