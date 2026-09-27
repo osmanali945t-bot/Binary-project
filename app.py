@@ -1,9 +1,6 @@
 import os
 import json
 import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import requests
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
@@ -12,35 +9,6 @@ app.secret_key = 'quotex_ai_pro_ultra_secure_2026_secret_key'
 
 VIP_PASSWORD = "VIP153"
 USERS_FILE = "users.json"
-
-# ==========================================
-# জিমেইল SMTP কনফিগারেশন (আপনার জিমেইল ও অ্যাপ পাসওয়ার্ড বসান)
-# ==========================================
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SENDER_EMAIL = "your_email@gmail.com"   # আপনার জিমেইল আইডি এখানে লিখুন
-SENDER_PASSWORD = "your_app_password"    # আপনার জিমেইলের Google App Password এখানে লিখুন
-
-def send_email_code(to_email, code):
-    """রিয়েল-টাইমে জিমেইলে ৬ ডিজিটের ভেরিফিকেশন কোড পাঠানোর ফাংশন"""
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = to_email
-        msg['Subject'] = "Quotex AI Pro - Email Verification Code"
-
-        body = f"আপনার Quotex AI Pro একাউন্টের ভেরিফিকেশন কোড হলো: {code}\nকোডটি অ্যাপে দিয়ে ভেরিফিকেশন সম্পন্ন করুন।"
-        msg.attach(MIMEText(body, 'plain'))
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        server.quit()
-        return True
-    except Exception as e:
-        print(f"Email Sending Error: {e}")
-        return False
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -114,8 +82,10 @@ def api_signup():
         return jsonify({'status': 'error', 'msg_bn': 'সবগুলো ঘর সঠিকভাবে পূরণ করুন।'})
 
     users = load_users()
+    
+    # চেক করা হচ্ছে এই জিমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে কি না
     if email in users:
-        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা হয়েছে।'})
+        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট রেজিস্টার্ড রয়েছে! দয়া করে লগইন করুন।'})
 
     # ৬ ডিজিটের ভেরিফিকেশন কোড জেনারেট করা
     v_code = str(random.randint(100000, 999999))
@@ -130,19 +100,13 @@ def api_signup():
     }
     save_users(users)
     
-    # জিমেইলে কোড পাঠানোর ফাংশন কল করা
-    email_sent = send_email_code(email, v_code)
-    
-    if email_sent:
-        msg_text = 'রেজিস্ট্রেশন সফল! আপনার জিমেইলে ৬ ডিজিটের কোড পাঠানো হয়েছে।'
-    else:
-        print(f"\n[BACKUP CODE FOR {email}]: {v_code}\n")
-        msg_text = f'রেজিস্ট্রেশন সফল! (ইমেইল পাঠাতে সমস্যা হয়েছে, টার্মিনাল কোড: {v_code})'
+    # টার্মিনাল লগ-এ কোড প্রিন্ট হবে
+    print(f"\n[SIGNUP VERIFICATION CODE FOR {email}]: {v_code}\n")
 
     return jsonify({
         'status': 'success', 
         'email': email,
-        'msg_bn': msg_text
+        'msg_bn': f'রেজিস্ট্রেশন সফল! আপনার ভেরিফিকেশন কোড হলো: {v_code}'
     })
 
 @app.route('/api/verify-code', methods=['POST'])
@@ -153,7 +117,7 @@ def api_verify_code():
 
     users = load_users()
     if email not in users:
-        return jsonify({'status': 'error', 'msg_bn': 'ইউজার পাওয়া যায়নি। আবার সাইন আপ করুন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'ইউজার পাওয়া যায়নি।'})
 
     stored_code = str(users[email].get('verification_code', ''))
     
@@ -162,7 +126,7 @@ def api_verify_code():
         save_users(users)
         return jsonify({'status': 'success', 'msg_bn': 'ইমেইল সফলভাবে ভেরিফাই হয়েছে! এখন লগইন করুন।'})
     else:
-        return jsonify({'status': 'error', 'msg_bn': 'ভুল ভেরিফিকেশন কোড দিয়েছেন! সঠিক কোড দিন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'ভুল ভেরিফিকেশন কোড দিয়েছেন!'})
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
@@ -172,13 +136,17 @@ def api_login():
 
     users = load_users()
     if email not in users:
-        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট নেই!'})
+        return jsonify({'status': 'error', 'msg_bn': 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট নেই! প্রথমে সাইন আপ করুন।'})
 
     user = users[email]
+    
+    # ইমেইল ভেরিফাইড কি না চেক করা
     if not user.get('verified', False):
-        return jsonify({'status': 'error', 'msg_bn': 'আপনার ইমেইলটি এখনো ভেরিফাই করা হয়নি।'})
+        return jsonify({'status': 'error', 'msg_bn': 'আপনার ইমেইলটি এখনো ভেরিফাই করা হয়নি। কোড দিয়ে ভেরিফাই করুন।'})
+    
+    # ভুল পাসওয়ার্ড চেক করা
     if user['password'] != password:
-        return jsonify({'status': 'error', 'msg_bn': 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।'})
+        return jsonify({'status': 'error', 'msg_bn': 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিয়ে লগইন করুন।'})
 
     session['logged_in'] = True
     session['username'] = user['name']
