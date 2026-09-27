@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUOTEX AI - Login & Sign Up</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }
+        body { background-color: #0b0e14; color: #e1e6eb; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 14px; }
+        .auth-card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; box-shadow: 0 12px 32px rgba(0,0,0,0.7); }
+        .logo { font-size: 24px; color: #2962ff; font-weight: bold; margin-bottom: 4px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .subtitle { font-size: 12px; color: #8b949e; margin-bottom: 20px; text-align: center; }
+        .tabs { display: flex; background: #0d1117; border-radius: 8px; padding: 4px; margin-bottom: 18px; border: 1px solid #30363d; }
+        .tab-btn { flex: 1; background: transparent; border: none; color: #8b949e; padding: 10px; font-weight: bold; font-size: 13px; cursor: pointer; border-radius: 6px; transition: 0.3s; }
+        .tab-btn.active { background: #2962ff; color: #fff; }
+        label { font-size: 12px; color: #8b949e; display: block; margin-bottom: 5px; }
+        input { width: 100%; background: #0d1117; color: #fff; border: 1px solid #30363d; padding: 11px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; outline: none; }
+        .btn-submit { width: 100%; background: linear-gradient(135deg, #2962ff, #1e4bd8); color: #fff; border: none; padding: 13px; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; margin-top: 6px; }
+        .alert-box { padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 12px; display: none; text-align: center; }
+        .alert-error { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid #f85149; }
+        .alert-success { background: rgba(46,160,67,0.15); color: #2ea043; border: 1px solid #2ea043; }
+        .form-section { display: none; }
+        .form-section.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <div class="logo"><i class="fa-solid fa-bolt"></i> QUOTEX AI PRO</div>
+        <div class="subtitle">প্রো ট্রেডিং সিগন্যাল টার্মিনাল</div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('login')">লগইন (Login)</button>
+            <button class="tab-btn" onclick="switchTab('signup')">সাইন আপ (Sign Up)</button>
+        </div>
+
+        <div id="alertBox" class="alert-box"></div>
+
+        <div id="loginSection" class="form-section active">
+            <label>ইমেইল এড্রেস</label>
+            <input type="email" id="loginEmail" placeholder="example@gmail.com">
+            <label>পাসওয়ার্ড</label>
+            <input type="password" id="loginPassword" placeholder="********">
+            <button class="btn-submit" onclick="handleLogin()">লগইন করুন</button>
+        </div>
+
+        <div id="signupSection" class="form-section">
+            <label>পূর্ণ নাম</label>
+            <input type="text" id="signupName" placeholder="Rahim Trader">
+            <label>ইমেইল এড্রেস</label>
+            <input type="email" id="signupEmail" placeholder="example@gmail.com">
+            <label>মোবাইল নাম্বার</label>
+            <input type="text" id="signupPhone" placeholder="017xxxxxxxx">
+            <label>পাসওয়ার্ড</label>
+            <input type="password" id="signupPassword" placeholder="********">
+            <button class="btn-submit" onclick="handleSignup()">একাউন্ট তৈরি করুন</button>
+        </div>
+
+        <div id="verifySection" class="form-section">
+            <label style="color: #2ea043; font-weight: bold; text-align: center; margin-bottom: 10px;">ইমেইল ভেরিফিকেশন কোড দিন</label>
+            <p style="font-size: 11px; color: #8b949e; text-align: center; margin-bottom: 12px;">টার্মিনালে পাঠানো ৬ ডিজিটের কোডটি এখানে লিখুন</p>
+            <input type="text" id="verifyCode" placeholder="৬ ডিজিটের কোড" style="text-align: center; font-size: 18px; letter-spacing: 4px;">
+            <button class="btn-submit" onclick="handleVerify()" style="background: #238636;">কোড ভেরিফাই করুন</button>
+        </div>
+    </div>
+
+    <script>
+        let registeredEmail = '';
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+            hideAlert();
+            if (tab === 'login') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('loginSection').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('signupSection').classList.add('active');
+            }
+        }
+        function showAlert(msg, isSuccess = false) {
+            const box = document.getElementById('alertBox');
+            box.innerText = msg;
+            box.className = 'alert-box ' + (isSuccess ? 'alert-success' : 'alert-error');
+            box.style.display = 'block';
+        }
+        function hideAlert() { document.getElementById('alertBox').style.display = 'none'; }
+
+        function handleSignup() {
+            const name = document.getElementById('signupName').value.trim();
+            const email = document.getElementById('signupEmail').value.trim();
+            const phone = document.getElementById('signupPhone').value.trim();
+            const password = document.getElementById('signupPassword').value.trim();
+            if (!name || !email || !phone || !password) { showAlert('সবগুলো ফিল্ড পূরণ করা বাধ্যতামূলক।'); return; }
+
+            fetch('/api/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, phone, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    registeredEmail = data.email;
+                    showAlert(data.msg_bn, true);
+                    document.getElementById('signupSection').classList.remove('active');
+                    document.getElementById('verifySection').classList.add('active');
+                } else { showAlert(data.msg_bn); }
+            });
+        }
+
+        function handleVerify() {
+            const code = document.getElementById('verifyCode').value.trim();
+            if (!code) { showAlert('ভেরিফিকেশন কোড লিখুন।'); return; }
+
+            fetch('/api/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: registeredEmail, code: code })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showAlert(data.msg_bn, true);
+                    setTimeout(() => { switchTab('login'); }, 2000);
+                } else { showAlert(data.msg_bn); }
+            });
+        }
+
+        function handleLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            if (!email || !password) { showAlert('ইমেইল এবং পাসওয়ার্ড দিন।'); return; }
+
+            fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') { window.location.href = data.redirect; }
+                else { showAlert(data.msg_bn); }
+            });
+        }
+    </script>
+</body>
+</html>
